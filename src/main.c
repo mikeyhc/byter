@@ -1,6 +1,10 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <errno.h>
 
 #define ROW_LENGTH 20
 
@@ -115,41 +119,62 @@ void print_char_row(char *str, char *other)
  */
 int compare_files(char *file1, char *file2)
 {
-	FILE *fh1, *fh2;
+	int fh1, fh2, r1, r2;
+	unsigned ur1, ur2;
 	char buf1[ROW_LENGTH + 1], buf2[ROW_LENGTH + 1];
 	int i, pos;
 
-	fh1 = fopen(file1, "rb");
-	if(!fh1){
-		fprintf(stderr,  "could not read %s\n", file1);
+	fh1 = open(file1, 0, O_RDONLY);
+	if(fh1==-1){
+		fprintf(stderr,  "could not read %s - %s\n", file1, 
+			strerror(errno));
 		return EXIT_FAILURE;
 	}
-	fh2 = fopen(file2, "rb");
-	if(!fh2){
+	fh2 = open(file2, 0, O_RDONLY);
+	if(fh2==-1){
 		close(fh1);
-		fprintf(stderr, "could not read %s\n", file2);
+		fprintf(stderr, "could not read %s - %s\n", file2,
+			strerror(errno));
 		return EXIT_FAILURE;
 	}
 
 	pos = 0;
-	while(fgets(buf1, ROW_LENGTH + 1, fh1)!=NULL){
-		if(fgets(buf2, ROW_LENGTH + 1, fh2)==NULL)
+
+	while((r1 = read(fh1, buf1, ROW_LENGTH))>0){
+		if((r2 = read(fh2, buf2, ROW_LENGTH))<=0)
 			break;
+		buf1[r1] = '\0';
+		buf2[r2] = '\0';
 		print_hex_row(buf1, buf2, pos*ROW_LENGTH);
 		print_char_row(buf1, buf2);
 		printf("\n");
 		pos++;
 	}
 
+	if(r1==-1)
+		fprintf(stderr, "Error reading from %s - %s\n",
+			file1, strerror(errno));
+	else if(r2==-1)
+		fprintf(stderr, "Error reading from %s - %s\n",
+			file2, strerror(errno));
+
+	i = lseek(fh1, 0, SEEK_CUR);
+	ur1 = lseek(fh1, 0, SEEK_END) - i;
+	i = lseek(fh2, 0, SEEK_CUR);
+	ur2 = lseek(fh2, 0, SEEK_END) - i;
+
 	close(fh1);
 	close(fh2);
 
 	if(color)
-		printf("\t\033[1;33;40m%6d\033[m total\n\t\033[1;32;40m%6d"
-			"\033[m matched\n\t\033[1;31;40m%6d\033[m no match\n",
-			right + wrong, right, wrong);
+		printf("\t\033[1;36;40m%6d\033[m %s unread\n\t\033[1;36;40m"
+			"%6d\033[m %s unread\n\t\033[1;33;40m%6d\033[m "
+			"total\n\t\033[1;32;40m%6d\033[m matched\n\t"
+			"\033[1;31;40m%6d\033[m no match\n", ur1, file1, ur2,
+			file2, right + wrong, right, wrong);
 	else
-		printf("\t%6d total\n\t%6d matched\n\t%6d no match\n", 
+		printf("\t%6d %s unread\n\t%6d %s unread\n\t%6d total\n\t%6d "
+			"matched\n\t%6d no match\n", ur1, file1, ur2, file2, 
 			right+wrong, right, wrong);
 	return EXIT_SUCCESS;
 }/* end: compare_files */
