@@ -2,7 +2,14 @@
 #include <stdio.h>
 #include <string.h>
 
+#define ROW_LENGTH 20
+
+#define printf_color(x,y,c, z) printf("%s"x"%s", color && c!=z ?	\
+			"\033[1;31;40m" : "", y, color && c!=z ? "\033[m" : "")
+
 static int color = 0;
+static int right = 0;
+static int wrong = 0;
 
 /* print_usage
  * prints the usage message
@@ -32,17 +39,72 @@ void process_cmd_args(int argc, char **argv)
 {
 	int i;
 
-	for(i=1; i<argc-2; i++){
+	for(i=1; i<argc; i++)
 		if(!strcmp(argv[i], "-h") || !strcmp(argv[i], "--help"))
 			print_usage(argv[0], EXIT_SUCCESS);
 		else if(!strcmp(argv[i], "-c") || !strcmp(argv[i], "--color"))
 			color = 1;
-		else{
+		else if(!strncmp(argv[i], "-", 1)){
 			fprintf(stderr, "unknown option: %s\n", argv[i]);
 			print_usage(argv[0], EXIT_FAILURE);
 		}
-	}
 }/* end: process_cmd_args */
+
+/* print_hex_row
+ * prints out a row in hex format
+ *
+ * param str: the string to print
+ * param other: the string to check against
+ * param offset: the offset of str in the total string
+ */
+void print_hex_row(char *str, char *other, int offset)
+{
+	int i;
+
+	printf(" %06d", offset);
+	for(i=0; str[i]!='\0'; i++){
+		printf_color(" %02X", str[i], str[i], other[i]);
+		if(str[i]==other[i])
+			right++;
+		else
+			wrong++;
+	}
+	printf("\n       ");
+	for(i=0; other[i]!='\0'; i++)
+		printf_color(" %02X", other[i], other[i], str[i]);
+	printf("\n");
+}/* end: print_hex_row */
+
+/* print_char_row
+ * prints out a row in char format
+ *
+ * param str: the string to print
+ * param other: the string to check against
+ */
+void print_char_row(char *str, char *other)
+{
+	int i;
+	char c;
+
+	printf("       ");
+	for(i=0; str[i]!='\0'; i++){
+		if(str[i]=='\n')
+			printf_color(" %s", "\\n", str[i], other[i]);
+		else if(str[i]=='\t')
+			printf_color(" %s", "\\t", str[i], other[i]);
+		else
+			printf_color("  %c", str[i], str[i], other[i]);
+	}
+	printf("\n       ");
+	for(i=0; other[i]!='\0'; i++)
+		if(other[i]=='\n')
+			printf_color(" %s", "\\n", other[i], str[i]);
+		else if(other[i]=='\t')
+			printf_color(" %s", "\\t", other[i], str[i]);
+		else
+			printf_color("  %c", other[i], other[i], str[i]);
+	printf("\n");
+}/*end: print_char_row */
 
 /* compare_files
  * does the comparision and printing of 2 files
@@ -54,8 +116,8 @@ void process_cmd_args(int argc, char **argv)
 int compare_files(char *file1, char *file2)
 {
 	FILE *fh1, *fh2;
-	char buf1[21], buf2[21];
-	int i;
+	char buf1[ROW_LENGTH + 1], buf2[ROW_LENGTH + 1];
+	int i, pos;
 
 	fh1 = fopen(file1, "rb");
 	if(!fh1){
@@ -69,42 +131,26 @@ int compare_files(char *file1, char *file2)
 		return EXIT_FAILURE;
 	}
 
-	while(fgets(buf1, 21, fh1)!=NULL){
-		if(fgets(buf2, 21, fh2)==NULL)
+	pos = 0;
+	while(fgets(buf1, ROW_LENGTH + 1, fh1)!=NULL){
+		if(fgets(buf2, ROW_LENGTH + 1, fh2)==NULL)
 			break;
-		for(i=0; buf1[i]!='\0'; i++)
-			printf(" %02X", buf1[i]);
+		print_hex_row(buf1, buf2, pos*ROW_LENGTH);
+		print_char_row(buf1, buf2);
 		printf("\n");
-		for(i=0; buf2[i]!='\0'; i++)
-			printf(" %02X", buf2[i]);
-		printf("\n");
-		for(i=0; buf1[i]!='\0'; i++){
-			if(buf1[i]=='\t')
-				printf(" \\t");
-			else if(buf1[i]=='\n')
-				printf(" \\n");
-			else
-				printf("  %c", buf1[i]);
-		}
-		printf("\n");
-		for(i=0; buf2[i]!='\0'; i++){
-			if(buf2[i]=='\t')
-				printf(" \\t");
-			else if(buf2[i]=='\n')
-				printf(" \\n");
-			else
-				printf("  %c", buf2[i]);
-
-		}
-		printf("\n");
-		printf("\n");
+		pos++;
 	}
-
-
-
 
 	close(fh1);
 	close(fh2);
+
+	if(color)
+		printf("\t\033[1;33;40m%6d\033[m total\n\t\033[1;32;40m%6d"
+			"\033[m matched\n\t\033[1;31;40m%6d\033[m no match\n",
+			right + wrong, right, wrong);
+	else
+		printf("\t%6d total\n\t%6d matched\n\t%6d no match\n", 
+			right+wrong, right, wrong);
 	return EXIT_SUCCESS;
 }/* end: compare_files */
 
@@ -116,10 +162,23 @@ int compare_files(char *file1, char *file2)
  */
 int main(int argc, char **argv)
 {
+	int f1, f2;
+
 	if(argc<3){
-		fprintf(stderr, "require at least two file names\n");
+		fprintf(stderr, "require at least two files\n");
 		print_usage(argv[0], EXIT_FAILURE);
 	}
+
 	process_cmd_args(argc, argv);
-	return compare_files(argv[argc-2], argv[argc-1]);
+	for(f1=1; f1<argc; f1++)
+		if(strncmp(argv[f1], "-", 1))
+			break;
+	for(f2=f1+1; f2<argc; f2++)
+		if(strncmp(argv[f2], "-", 1))
+			break;
+	if(f2==argc){
+		fprintf(stderr, "requires at least 2 files\n");
+		print_usage(argv[0], EXIT_FAILURE);
+	}
+	return compare_files(argv[f1], argv[f2]);
 }/* end: main */
