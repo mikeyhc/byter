@@ -48,7 +48,7 @@ void process_cmd_args(int argc, char **argv)
 			print_usage(argv[0], EXIT_SUCCESS);
 		else if(!strcmp(argv[i], "-c") || !strcmp(argv[i], "--color"))
 			color = 1;
-		else if(!strncmp(argv[i], "-", 1)){
+		else if(argv[i][0]=='-'){
 			fprintf(stderr, "unknown option: %s\n", argv[i]);
 			print_usage(argv[0], EXIT_FAILURE);
 		}
@@ -196,10 +196,10 @@ int main(int argc, char **argv)
 
 	process_cmd_args(argc, argv);
 	for(f1=1; f1<argc; f1++)
-		if(strncmp(argv[f1], "-", 1))
+		if(argv[f1][0]!='-')
 			break;
 	for(f2=f1+1; f2<argc; f2++)
-		if(strncmp(argv[f2], "-", 1))
+		if(argv[f2][0]!='-')
 			break;
 	if(f2==argc){
 		fprintf(stderr, "requires at least 2 files\n");
